@@ -1,30 +1,51 @@
-# See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
-
-# This stage is used when running from VS in fast mode (Default for Debug configuration)
+# Base image - used for running the application
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-USER $APP_UID
 WORKDIR /app
+
+# Render will access the application on port 8080
 EXPOSE 8080
-EXPOSE 8081
+
+# Tell ASP.NET Core to listen on all network interfaces
+ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 
 
-# This stage is used to build the service project
+# Build image
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Prototype Sim.csproj", "."]
+
+# Copy project file and restore dependencies
+COPY ["Prototype Sim.csproj", "./"]
 RUN dotnet restore "./Prototype Sim.csproj"
+
+# Copy the remaining source code
 COPY . .
-WORKDIR "/src/."
-RUN dotnet build "./Prototype Sim.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
-# This stage is used to publish the service project to be copied to the final stage
+# Build the application
+RUN dotnet build "./Prototype Sim.csproj" \
+    -c $BUILD_CONFIGURATION \
+    -o /app/build
+
+
+# Publish image
 FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Prototype Sim.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
-# This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
+ARG BUILD_CONFIGURATION=Release
+
+RUN dotnet publish "./Prototype Sim.csproj" \
+    -c $BUILD_CONFIGURATION \
+    -o /app/publish \
+    /p:UseAppHost=false
+
+
+# Final production image
 FROM base AS final
+
 WORKDIR /app
+
+# Copy published application
 COPY --from=publish /app/publish .
+
+# Start the application
 ENTRYPOINT ["dotnet", "Prototype Sim.dll"]
